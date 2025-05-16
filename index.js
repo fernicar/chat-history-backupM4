@@ -705,161 +705,191 @@ async function performManualBackup() {
 // index.js (内部的 restoreBackup 函数 - 审查和优化)
 async function restoreBackup(backupData) {
     // --- 入口与基本信息提取 ---
-    console.log('[聊天自动备份] 开始恢复备份:', { chatKey: backupData.chatKey, timestamp: backupData.timestamp });
+    console.log('[聊天自动备份] 开始恢复备份:', backupData); // <-- 添加日志
     const isGroup = backupData.chatKey.startsWith('group_');
     const entityIdMatch = backupData.chatKey.match(
         isGroup
-        ? /group_(\w+)_/ // 匹配群组ID
-        : /^char_(\d+)/  // 匹配角色ID (索引)
+        ? /group_(\w+)_/
+        : /^char_(\d+)/
     );
     let entityId = entityIdMatch ? entityIdMatch[1] : null;
-    let targetCharIndex = -1; // 保存角色索引，以便稍后切回
+    let targetCharIndex = -1;
 
     if (!entityId) {
-        console.error('[聊天自动备份] 无法从备份数据中提取角色/群组ID:', backupData.chatKey);
+        console.error('[聊天自动备份] 无法从备份数据中提取角色/群组ID:', backupData.chatKey); // <-- 使用 error
         toastr.error('无法识别备份对应的角色/群组ID');
         return false;
     }
 
-    logDebug(`恢复目标: ${isGroup ? '群组' : '角色'} ID/标识: ${entityId}`);
+    console.log(`[聊天自动备份] 恢复目标: ${isGroup ? '群组' : '角色'} ID/标识: ${entityId}`); // <-- 添加日志
 
-    // *** 保存当前选中的实体 ID 和类型，以便最后切回 ***
-    const entityToRestore = {
-        isGroup: isGroup,
-        id: entityId,
-        charIndex: -1 // 初始化
-    };
-    if (!isGroup) {
-        entityToRestore.charIndex = parseInt(entityId, 10);
-        if (isNaN(entityToRestore.charIndex) || entityToRestore.charIndex < 0 || entityToRestore.charIndex >= characters.length) {
-             console.error(`[聊天自动备份] 角色索引无效: ${entityId}`);
-             toastr.error(`无效的角色索引 ${entityId}`);
-             return false;
-        }
-    }
+    // ... (代码保持不变) ...
 
     try {
-        // --- 步骤 1: 切换上下文 --- (如果当前不是目标，则切换；如果已经是，则跳过)
+        // --- 步骤 1: 切换上下文 ---
         const initialContext = getContext();
+        console.log('[聊天自动备份] 步骤 1 - 切换前上下文:', { // <-- 记录切换前状态
+            groupId: initialContext.groupId,
+            characterId: initialContext.characterId,
+            chatId: initialContext.chatId
+        });
         const needsContextSwitch = (isGroup && initialContext.groupId !== entityId) ||
                                    (!isGroup && String(initialContext.characterId) !== entityId);
 
         if (needsContextSwitch) {
             try {
-                logDebug('步骤 1: 需要切换上下文，开始切换...');
+                console.log('[聊天自动备份] 步骤 1: 需要切换上下文，开始切换...'); // <-- 添加日志
                 if (isGroup) {
                     await select_group_chats(entityId);
                 } else {
                     await selectCharacterById(entityToRestore.charIndex, { switchMenu: false });
                 }
-                await new Promise(resolve => setTimeout(resolve, 500)); // 等待切换完成
-                logDebug('步骤 1: 上下文切换完成');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                console.log('[聊天自动备份] 步骤 1: 上下文切换完成。当前上下文:', { // <-- 记录切换后状态
+                    groupId: getContext().groupId,
+                    characterId: getContext().characterId,
+                    chatId: getContext().chatId
+                });
             } catch (switchError) {
                 console.error('[聊天自动备份] 步骤 1 失败: 切换角色/群组失败:', switchError);
                 toastr.error(`切换上下文失败: ${switchError.message || switchError}`);
                 return false;
             }
         } else {
-            logDebug('步骤 1: 当前已在目标上下文，跳过切换');
+            console.log('[聊天自动备份] 步骤 1: 当前已在目标上下文，跳过切换'); // <-- 添加日志
         }
-
 
         // --- 步骤 2: 创建新聊天 ---
         let originalChatIdBeforeNewChat = getContext().chatId;
-        logDebug('步骤 2: 开始创建新聊天...');
+        console.log('[聊天自动备份] 步骤 2: 开始创建新聊天...'); // <-- 添加日志
         await doNewChat({ deleteCurrentChat: false });
         await new Promise(resolve => setTimeout(resolve, 1000));
-        logDebug('步骤 2: 新聊天创建完成');
+        console.log('[聊天自动备份] 步骤 2: 新聊天创建完成'); // <-- 添加日志
 
         // --- 步骤 3: 获取新聊天 ID ---
-        logDebug('步骤 3: 获取新聊天 ID...');
+        console.log('[聊天自动备份] 步骤 3: 获取新聊天 ID...'); // <-- 添加日志
         let contextAfterNewChat = getContext();
         const newChatId = contextAfterNewChat.chatId;
+        console.log('[聊天自动备份] 步骤 3 - 新聊天创建后上下文:', { // <-- 记录新聊天后状态
+            groupId: contextAfterNewChat.groupId,
+            characterId: contextAfterNewChat.characterId,
+            chatId: newChatId,
+            originalChatId: originalChatIdBeforeNewChat
+        });
+
 
         if (!newChatId || newChatId === originalChatIdBeforeNewChat) {
-            console.error('[聊天自动备份] 步骤 3 失败: 未能获取有效的新 chatId');
+            console.error('[聊天自动备份] 步骤 3 失败: 未能获取有效的新 chatId。 新ChatID:', newChatId, "旧ChatID:", originalChatIdBeforeNewChat);
             toastr.error('未能获取新聊天的ID，无法继续恢复');
             return false;
         }
-        logDebug(`步骤 3: 新聊天ID: ${newChatId}`);
-        // 上下文验证可以简化或移除，因为后续会强制切换回来
+        console.log(`[聊天自动备份] 步骤 3: 新聊天ID: ${newChatId}`); // <-- 添加日志
 
         // --- 步骤 4: 准备聊天内容和元数据 ---
-        // (保持不变)
-        logDebug('步骤 4: 准备内存中的聊天内容和元数据...');
+        console.log('[聊天自动备份] 步骤 4: 准备内存中的聊天内容和元数据...'); // <-- 添加日志
         const chatToSave = structuredClone(backupData.chat);
-        let metadataToSave = {};
-        // ... (元数据处理保持不变) ...
-        logDebug(`步骤 4: 准备完成, 消息数: ${chatToSave.length}, 元数据:`, metadataToSave);
+        // let metadataToSave = {}; // 旧的，会导致表格元数据丢失
+        let metadataToSave = structuredClone(backupData.metadata || {}); // <-- 确保恢复 metadata
+        console.log('[聊天自动备份] 步骤 4 - 待保存的聊天消息 (前两条):', chatToSave.slice(0, 2)); // <-- 记录部分聊天内容
+        console.log('[聊天自动备份] 步骤 4 - 待保存的元数据:', metadataToSave); // <-- 记录元数据
+
+        // 特别检查表格相关的元数据
+        if (metadataToSave.sheets) {
+            console.log('[聊天自动备份] 步骤 4 - 恢复的元数据中包含表格定义 (sheets):', metadataToSave.sheets);
+        } else {
+            console.warn('[聊天自动备份] 步骤 4 - 警告：恢复的元数据中【不包含】表格定义 (sheets)！这可能导致表格无法恢复。备份时的 metadata:', backupData.metadata);
+        }
+
+
+        console.log(`[聊天自动备份] 步骤 4: 准备完成, 消息数: ${chatToSave.length}, 元数据:`, metadataToSave); // <-- 添加日志
 
         // --- 步骤 5: 保存恢复的数据到新聊天文件 ---
-        // (保持不变，临时修改全局状态以保存)
-        logDebug(`步骤 5: 临时替换全局 chat 和 metadata 以便保存...`);
+        console.log(`[聊天自动备份] 步骤 5: 临时替换全局 chat 和 metadata 以便保存...`); // <-- 添加日志
         let globalContext = getContext();
         let originalGlobalChat = globalContext.chat.slice();
-        let originalGlobalMetadata = structuredClone(globalContext.chat_metadata);
+        let originalGlobalMetadata = structuredClone(globalContext.chat_metadata); // 确保备份的是 chat_metadata
+        console.log('[聊天自动备份] 步骤 5 - 保存前的全局 chat_metadata:', originalGlobalMetadata);
+
 
         globalContext.chat.length = 0;
         chatToSave.forEach(msg => globalContext.chat.push(msg));
-        updateChatMetadata(metadataToSave, true);
+        // updateChatMetadata(metadataToSave, true); // 旧的，可能不完全正确
+        globalContext.chat_metadata = metadataToSave; // <-- 直接赋值恢复的元数据
+        console.log('[聊天自动备份] 步骤 5 - 全局 chat_metadata 已被恢复的元数据替换:', globalContext.chat_metadata);
 
-        logDebug(`步骤 5: 即将调用 saveChat({ chatName: ${newChatId}, force: true }) 保存恢复的数据...`);
+
+        console.log(`[聊天自动备份] 步骤 5: 即将调用 saveChat({ chatName: ${newChatId}, force: true }) 保存恢复的数据...`); // <-- 添加日志
         try {
             await saveChat({ chatName: newChatId, force: true });
-            logDebug('步骤 5: saveChat 调用完成');
+            console.log('[聊天自动备份] 步骤 5: saveChat 调用完成'); // <-- 添加日志
         } catch (saveError) {
             console.error("[聊天自动备份] 步骤 5 失败: saveChat 调用时出错:", saveError);
             toastr.error(`保存恢复的聊天失败: ${saveError.message}`, '聊天自动备份');
             // 恢复状态
             globalContext.chat.length = 0;
             originalGlobalChat.forEach(msg => globalContext.chat.push(msg));
-            updateChatMetadata(originalGlobalMetadata, true);
+            // updateChatMetadata(originalGlobalMetadata, true);
+            globalContext.chat_metadata = originalGlobalMetadata; // 恢复
+            console.warn('[聊天自动备份] 步骤 5 - saveChat 失败后，全局状态已恢复。');
             return false;
         } finally {
              // 恢复状态
              globalContext.chat.length = 0;
              originalGlobalChat.forEach(msg => globalContext.chat.push(msg));
-             updateChatMetadata(originalGlobalMetadata, true);
-             logDebug('步骤 5: 全局 chat 和 metadata 已恢复到保存前状态');
+             // updateChatMetadata(originalGlobalMetadata, true);
+             globalContext.chat_metadata = originalGlobalMetadata; // 恢复
+             console.log('[聊天自动备份] 步骤 5: 全局 chat 和 chat_metadata 已恢复到保存前状态'); // <-- 添加日志
         }
 
         // --- 步骤 6: 强制重加载 - 通过关闭再打开 ---
-        logDebug('步骤 6: 开始强制重加载流程 (关闭再打开)...');
+        console.log('[聊天自动备份] 步骤 6: 开始强制重加载流程 (关闭再打开)...'); // <-- 添加日志
         try {
             // 6a: 触发关闭聊天
-            logDebug("步骤 6a: 触发 '关闭聊天' (模拟点击 #option_close_chat)");
+            console.log("[聊天自动备份] 步骤 6a: 触发 '关闭聊天' (模拟点击 #option_close_chat)");
             const closeButton = document.getElementById('option_close_chat');
             if (closeButton) {
                 closeButton.click();
             } else {
-                console.warn("未能找到 #option_close_chat 按钮来触发关闭");
-                // 如果找不到按钮，可能需要其他方式，但点击通常是最直接的
+                console.warn("[聊天自动备份] 未能找到 #option_close_chat 按钮来触发关闭");
             }
-            await new Promise(resolve => setTimeout(resolve, 800)); // 等待关闭动画和状态更新
+            await new Promise(resolve => setTimeout(resolve, 800));
 
             // 6b: 触发重新选择目标实体
-            logDebug(`步骤 6b: 重新选择目标 ${entityToRestore.isGroup ? '群组' : '角色'} ID: ${entityToRestore.id}`);
+            console.log(`[聊天自动备份] 步骤 6b: 重新选择目标 ${entityToRestore.isGroup ? '群组' : '角色'} ID: ${entityToRestore.id}`);
             if (entityToRestore.isGroup) {
                 await select_group_chats(entityToRestore.id);
             } else {
                 await selectCharacterById(entityToRestore.charIndex, { switchMenu: false });
             }
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 等待加载和渲染完成
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
-            logDebug('步骤 6: 关闭再打开流程完成，UI应已正确加载');
+            console.log('[聊天自动备份] 步骤 6: 关闭再打开流程完成，UI应已正确加载'); // <-- 添加日志
+            console.log('[聊天自动备份] 步骤 6 - 关闭再打开后的上下文:', { // <-- 记录最终状态
+                groupId: getContext().groupId,
+                characterId: getContext().characterId,
+                chatId: getContext().chatId,
+                chatMetadata: getContext().chatMetadata // 非常重要！检查这个
+            });
+            // 检查此时 chatMetadata.sheets 是否是你期望从备份中恢复的
+            if (getContext().chatMetadata && getContext().chatMetadata.sheets) {
+                console.log('[聊天自动备份] 步骤 6 - 恢复后，当前聊天的表格定义 (sheets):', getContext().chatMetadata.sheets);
+            } else {
+                console.warn('[聊天自动备份] 步骤 6 - 警告：恢复后，当前聊天的表格定义 (sheets) 未找到或为空！');
+            }
+
+
         } catch (reloadError) {
             console.error('[聊天自动备份] 步骤 6 失败: 关闭或重新打开聊天时出错:', reloadError);
             toastr.error('重新加载恢复的聊天内容失败，请尝试手动切换聊天。数据已保存。');
         }
 
         // --- 步骤 7: 触发事件 ---
-        // (保持不变，但现在上下文应该是正确的)
-        logDebug('步骤 7: 触发 CHAT_CHANGED 事件...');
+        console.log('[聊天自动备份] 步骤 7: 触发 CHAT_CHANGED 事件...'); // <-- 添加日志
         const finalContext = getContext();
         eventSource.emit(event_types.CHAT_CHANGED, finalContext.chatId);
 
         // --- 结束 ---
-        console.log('[聊天自动备份] 恢复流程完成');
+        console.log('[聊天自动备份] 恢复流程完成'); // <-- 添加日志
         return true;
 
     } catch (error) {
