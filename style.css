@@ -1,18 +1,18 @@
-/* 聊天自动备份插件样式 */
+/* Chat Auto Backup Plugin Styles */
 
-/* 确保备份操作区域内的所有按钮文本都不换行 */
-.backup_actions .menu_button { /* 应用到恢复和删除按钮 */
+/* Ensure all button texts within the backup operation area do not wrap */
+.backup_actions .menu_button { /* Applied to restore and delete buttons */
     white-space: nowrap;
 }
 
-/* 假设手动备份按钮的 ID 是 #chat_backup_manual_backup */
-/* 或者，如果它也在 .chat_backup_controls 容器内，可以更通用地选择 */
-.chat_backup_controls button { /* 应用到控制区域内的所有按钮 */
+/* Assuming the manual backup button ID is #chat_backup_manual_backup */
+/* Alternatively, if it's also within the .chat_backup_controls container, it can be selected more generally */
+.chat_backup_controls button { /* Applied to all buttons within the controls area */
     white-space: nowrap;
 }
 
 
-/* 备份列表容器 */
+/* Backup List Container */
 .backup_list_container {
     margin-top: 15px;
     border: 1px solid var(--border-color);
@@ -36,7 +36,7 @@
     padding: 10px;
 }
 
-/* 控制区域 */
+/* Controls Area */
 .chat_backup_controls {
     display: flex;
     flex-wrap: wrap;
@@ -51,7 +51,7 @@
     margin: 5px;
 }
 
-/* 单个备份项目 */
+/* Individual Backup Item */
 .backup_item {
     display: flex;
     justify-content: space-between;
@@ -132,7 +132,7 @@
     line-height: 1.5;
 }
 
-/* 复选框样式 */
+/* Checkbox Styles */
 .checkbox_label {
     display: flex;
     align-items: center;
@@ -143,7 +143,7 @@
     margin-right: 5px;
 }
 
-/* 预览消息样式 */
+/* Preview Message Styles */
 .backup_preview_content {
     max-height: 400px;
     overflow-y: auto;
